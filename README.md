@@ -5,7 +5,7 @@ Un petit site-outil pour explorer et télécharger les pochettes (covers) d'albu
 ## Fonctionnalités
 
 - **Recherche libre** : artiste, titre, label ou style exact (ex. « gwo ka », « kizomba »).
-- **Filtre par style** : Rap, R'n'b, Raï, Zouk, Kompa, Reggae, Dancehall, Raboday, Afrobeat… ou « Tous styles ».
+- **Filtre par style** : Rap, R'n'b, Raï, Zouk, Kompa, Reggae, Dancehall, Afrobeat… ou « Tous styles ».
 - **Filtre par pays** : France, Haïti, Jamaïque, Algérie, Maroc, Sénégal, Brésil… (change le catalogue iTunes) ou « Tous pays ».
 - **Albums ou singles/titres**.
 - **Affichage en miniatures** avec **lazy load** au scroll.
@@ -15,12 +15,11 @@ Un petit site-outil pour explorer et télécharger les pochettes (covers) d'albu
 
 Ouvre simplement `index.html` dans un navigateur (double-clic), ou via GitHub Pages.
 
-Astuce : les styles de niche (Kompa, Raboday…) ne sont pas des genres officiels iTunes — ils fonctionnent comme mots-clés. Combine-les avec le bon pays pour de meilleurs résultats :
+Astuce : les styles de niche (Kompa…) ne sont pas des genres officiels iTunes — ils fonctionnent comme mots-clés. Combine-les avec le bon pays pour de meilleurs résultats :
 
 | Style     | Pays conseillé        |
 |-----------|-----------------------|
 | Kompa     | Haïti / France        |
-| Raboday   | Haïti                 |
 | Zouk      | France (Antilles)     |
 | Raï       | Algérie / France      |
 | Dancehall | Jamaïque              |
