@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cover Explorer</title>
+<style>
+  :root {
+    --bg: #0e0e12;
+    --panel: #17171d;
+    --border: #2a2a33;
+    --text: #e8e8ee;
+    --muted: #8a8a96;
+    --accent: #6c8cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  h1 { margin: 0 0 14px; font-size: 20px; font-weight: 600; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  select, input, button {
+    font: inherit;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+  }
+  input { flex: 1; min-width: 180px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .4; cursor: default; }
+  .meta { color: var(--muted); font-size: 13px; padding: 12px 20px 0; }
+  main { padding: 16px 20px 40px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .thumb { aspect-ratio: 1; width: 100%; object-fit: cover; background: #000; display: block; }
+  .info { padding: 8px 10px; font-size: 12px; flex: 1; }
+  .info .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info .artist { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dl { border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; padding: 8px; font-size: 12px; color: var(--accent); }
+  .sentinel { height: 1px; }
+  .loading { text-align: center; color: var(--muted); font-size: 13px; padding: 20px; }
+  .empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cover Explorer</h1>
+  <div class="controls">
+    <select id="genre"></select>
+    <select id="country"></select>
+    <select id="entity">
+      <option value="album">Albums</option>
+      <option value="song">Singles / titres</option>
+    </select>
+    <input id="term" placeholder="Recherche libre (artiste, titre, style…)" />
+    <button class="primary" id="search">Explorer</button>
+  </div>
+</header>
+<div class="meta" id="meta"></div>
+<main>
+  <div class="grid" id="grid"></div>
+  <div class="loading" id="loading" style="display:none">Chargement…</div>
+  <div class="sentinel" id="sentinel"></div>
+  <div class="empty" id="empty">Choisis un style et clique sur « Explorer ».</div>
+</main>
+
+<script>
+const GENRES = [
+  "Rap","R'n'b","Raï","Zouk","Kompa","Reggae","Dancehall","Raboday",
+  "Afrobeat","Pop","Rock","Electronic","Jazz","Soul","Funk","Latin"
+];
+const COUNTRIES = [
+  ["", "Tous pays"],
+  ["FR", "France"],
+  ["US", "États-Unis"],
+  ["GB", "Royaume-Uni"],
+  ["HT", "Haïti"],
+  ["JM", "Jamaïque"],
+  ["DZ", "Algérie"],
+  ["MA", "Maroc"],
+  ["TN", "Tunisie"],
+  ["SN", "Sénégal"],
+  ["CI", "Côte d'Ivoire"],
+  ["CM", "Cameroun"],
+  ["CD", "Rép. dém. Congo"],
+  ["NG", "Nigeria"],
+  ["BR", "Brésil"],
+  ["CA", "Canada"],
+  ["BE", "Belgique"]
+];
+const CHUNK = 24;
+let results = [];
+let shown = 0;
+let observer = null;
+
+const $ = id => document.getElementById(id);
+const genreSel = $("genre");
+const allOpt = document.createElement("option"); allOpt.value = ""; allOpt.textContent = "Tous styles";
+genreSel.appendChild(allOpt);
+GENRES.forEach(g => { const o = document.createElement("option"); o.value = g; o.textContent = g; genreSel.appendChild(o); });
+const countrySel = $("country");
+COUNTRIES.forEach(([v, label]) => { const o = document.createElement("option"); o.value = v; o.textContent = label; countrySel.appendChild(o); });
+
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cb = "cb_" + Math.random().toString(36).slice(2);
+    const script = document.createElement("script");
+    const timer = setTimeout(() => { cleanup(); reject(new Error("timeout")); }, 12000);
+    function cleanup() { clearTimeout(timer); delete window[cb]; script.remove(); }
+    window[cb] = data => { cleanup(); resolve(data); };
+    script.onerror = () => { cleanup(); reject(new Error("network")); };
+    script.src = url + "&callback=" + cb;
+    document.body.appendChild(script);
+  });
+}
+
+async function search() {
+  const genre = genreSel.value;
+  const entity = $("entity").value;
+  const country = countrySel.value;
+  const extra = $("term").value.trim();
+  const query = [extra, genre].filter(Boolean).join(" ").trim();
+  if (!query) {
+    $("empty").textContent = "Tape un mot-clé ou choisis un style.";
+    $("empty").style.display = "block";
+    $("grid").innerHTML = ""; $("loading").style.display = "none";
+    return;
+  }
+  const term = encodeURIComponent(query);
+  $("search").disabled = true;
+  $("empty").textContent = "Recherche…";
+  $("empty").style.display = "block";
+  $("grid").innerHTML = "";
+  shown = 0;
+  try {
+    let url = `https://itunes.apple.com/search?term=${term}&entity=${entity}&limit=200&media=music`;
+    if (country) url += `&country=${country}`;
+    const data = await jsonp(url);
+    results = (data.results || []).filter(r => r.artworkUrl100);
+    render();
+  } catch (e) {
+    $("empty").textContent = "Erreur de chargement. Réessaie.";
+  } finally {
+    $("search").disabled = false;
+  }
+}
+
+function appendCard(r) {
+  const thumb = r.artworkUrl100.replace("100x100", "300x300");
+  const full = hiRes(r.artworkUrl100);
+  const title = r.collectionName || r.trackName || "Sans titre";
+  const artist = r.artistName || "";
+  const safe = (artist + " - " + title).replace(/[^\w\-]+/g, "_").slice(0, 80);
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML =
+    `<img class="thumb" loading="lazy" src="${thumb}" alt="">
+     <div class="info">
+       <div class="title">${escape(title)}</div>
+       <div class="artist">${escape(artist)}</div>
+     </div>
+     <button class="dl">⤓ Télécharger</button>`;
+  card.querySelector(".dl").addEventListener("click", () => download(full, safe));
+  card.querySelector(".thumb").addEventListener("click", () => window.open(full, "_blank"));
+  $("grid").appendChild(card);
+}
+
+function loadMore() {
+  const slice = results.slice(shown, shown + CHUNK);
+  slice.forEach(appendCard);
+  shown += slice.length;
+  $("loading").style.display = shown < results.length ? "block" : "none";
+  // Tant que la sentinelle reste visible (page pas remplie), continuer.
+  if (shown < results.length) {
+    requestAnimationFrame(() => {
+      const rect = $("sentinel").getBoundingClientRect();
+      if (rect.top < window.innerHeight + 400) loadMore();
+    });
+  }
+}
+
+function hiRes(url) { return url.replace(/\/\d+x\d+bb\./, "/1000x1000bb."); }
+
+async function download(url, name) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name + ".jpg";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (e) {
+    window.open(url, "_blank");
+  }
+}
+
+function render() {
+  if (!results.length) {
+    $("empty").textContent = "Aucun résultat.";
+    $("empty").style.display = "block";
+    $("meta").textContent = "";
+    $("loading").style.display = "none";
+    return;
+  }
+  $("empty").style.display = "none";
+  const c = countrySel.options[countrySel.selectedIndex].textContent;
+  const label = [$("term").value.trim(), genreSel.value].filter(Boolean).join(" ") || "Tout";
+  $("meta").textContent = `${results.length} covers — ${label} · ${c}`;
+  window.scrollTo({ top: 0 });
+  loadMore();
+}
+
+function escape(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+$("search").addEventListener("click", search);
+$("term").addEventListener("keydown", e => { if (e.key === "Enter") search(); });
+
+observer = new IntersectionObserver(entries => {
+  if (entries[0].isIntersecting && shown > 0 && shown < results.length) loadMore();
+}, { rootMargin: "400px" });
+observer.observe($("sentinel"));
+</script>
+</body>
+</html>
